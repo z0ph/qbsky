@@ -15,8 +15,8 @@ Honestly, my intention is to automate the sharing of specific information throug
 ### Requirements
 
 1. AWS Account
-2. Bluesky App Password
-3. Terraform
+2. Bluesky Account
+3. Terraform App
 
 ### How to deploy on your AWS Account
 
@@ -34,7 +34,7 @@ _nb: Terraform is using remote state on S3._
 
 After you've deployed the Terraform you will need to set Bluesky API credentials manually to AWS Secret Manager using AWS console.
 
-Set the following credentials in AWS Secret Manager: `identifier` and `password`
+Set the following credentials in AWS Secret Manager: `bluesky_handle` and `bluesky_password`
 
 ### 🗯️ How to publish a message
 
