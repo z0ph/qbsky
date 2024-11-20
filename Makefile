@@ -2,7 +2,7 @@
 .PHONY: help tf-init tf-validate tf-plan tf-package tf-apply layer clean clean-layer cleaning artifacts
 
 ################ Project #######################
-PROJECT ?= qbsky-mgda
+PROJECT ?= qbsky-mamip
 DESCRIPTION ?= Dead simple SQS to Bluesky bot
 ################################################
 
@@ -109,4 +109,4 @@ clean:
 	@find . -name '__pycache__' -exec rm -fr {} +
 ################################################
 
-all: clean artifacts tf-package tf-init tf-apply
+all: tf-package tf-apply

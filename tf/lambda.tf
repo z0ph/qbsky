@@ -7,7 +7,8 @@ resource "aws_lambda_function" "lambda_function" {
   description      = var.description
   timeout          = 30
   memory_size      = 256
-  runtime          = "python3.9"
+  runtime          = "python3.11"
+  architectures    = ["arm64"]
 
   tags = {
     Project     = "${var.project}"

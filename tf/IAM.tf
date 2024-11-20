@@ -37,7 +37,7 @@ resource "aws_iam_role_policy" "lambda_policy" {
 				"secretsmanager:GetSecretValue"
 			],
 			"Resource": [
-				"${aws_secretsmanager_secret.ACCESS_TOKEN.arn}"
+				"${aws_secretsmanager_secret.secrets.arn}"
 			]
 		}
 	]
