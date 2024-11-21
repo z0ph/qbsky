@@ -5,6 +5,7 @@ import logging
 import requests
 from datetime import datetime
 from config import get_secret
+from typing import List, Dict
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
@@ -23,9 +24,9 @@ def get_auth_token(handle, password):
 
 def create_post(text, token, did):
     """Create a post on Bluesky"""
-    # Process text to ensure URLs are on their own line
-    processed_text = format_text_with_urls(text)
-    
+    # Parse text for URLs and create facets
+    facets = parse_facets(text)
+
     response = requests.post(
         "https://bsky.social/xrpc/com.atproto.repo.createRecord",
         headers={"Authorization": f"Bearer {token}"},
@@ -34,7 +35,8 @@ def create_post(text, token, did):
             "collection": "app.bsky.feed.post",
             "record": {
                 "$type": "app.bsky.feed.post",
-                "text": processed_text,
+                "text": text,  # Use original text, not processed
+                "facets": facets,  # Add facets for links
                 "createdAt": datetime.utcnow().isoformat() + "Z",
             },
         },
@@ -42,45 +44,42 @@ def create_post(text, token, did):
     return response
 
 
-def format_text_with_urls(text):
-    """Format text to ensure URLs are on their own line"""
-    import re
-    
+def parse_urls(text: str) -> List[Dict]:
+    """Parse URLs from text and return their byte spans"""
+    spans = []
     # URL regex pattern
-    url_pattern = r'https?://\S+'
-    
-    # Find all URLs in the text
-    urls = re.finditer(url_pattern, text)
-    
-    # Process each URL
-    last_end = 0
-    result = []
-    for match in urls:
-        start, end = match.span()
-        
-        # Add text before URL
-        before_url = text[last_end:start].rstrip()
-        if before_url:
-            result.append(before_url)
-        
-        # Add URL on its own line
-        result.append(match.group())
-        last_end = end
-    
-    # Add remaining text
-    if last_end < len(text):
-        remaining = text[last_end:].lstrip()
-        if remaining:
-            result.append(remaining)
-    
-    # Join with newlines
-    return '\n'.join(result)
+    url_regex = rb"[$|\W](https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*[-a-zA-Z0-9@%_\+~#//=])?)"
+    text_bytes = text.encode("UTF-8")
+    for m in re.finditer(url_regex, text_bytes):
+        spans.append({
+            "start": m.start(1),
+            "end": m.end(1),
+            "url": m.group(1).decode("UTF-8"),
+        })
+    return spans
+
+
+def parse_facets(text: str) -> List[Dict]:
+    """Parse text and create facets for URLs"""
+    facets = []
+    for u in parse_urls(text):
+        facets.append({
+            "index": {
+                "byteStart": u["start"],
+                "byteEnd": u["end"],
+            },
+            "features": [{
+                "$type": "app.bsky.richtext.facet#link",
+                "uri": u["url"],
+            }],
+        })
+    return facets
 
 
 def lambda_handler(event, context):
     """
     AWS Lambda handler that processes messages from SQS and posts them to Bluesky.
-    
+
     Args:
         event: AWS Lambda event containing SQS messages
         context: AWS Lambda context
@@ -104,18 +103,24 @@ def lambda_handler(event, context):
         processed_messages += 1
         message = record["body"]
         message_id = record.get("messageId", "unknown")
-        logger.info(f"Processing message {processed_messages}/{total_messages} (ID: {message_id})")
+        logger.info(
+            f"Processing message {processed_messages}/{total_messages} (ID: {message_id})"
+        )
         logger.debug(f"Raw message content: {message}")
 
         # Truncate message if too long (Bluesky limit is 300 characters)
         original_length = len(message)
-        post = (message[:275] + "..") if original_length > 279 else message
-        
-        if original_length > 279:
-            logger.warning(f"Message truncated from {original_length} to 277 characters")
+        post = (message[:297] + "...") if original_length > 300 else message
+
+        if original_length > 300:
+            logger.warning(
+                f"Message truncated from {original_length} to 300 characters"
+            )
 
         # Create post with both token and did
-        logger.info(f"Posting to Bluesky (message {processed_messages}/{total_messages})")
+        logger.info(
+            f"Posting to Bluesky (message {processed_messages}/{total_messages})"
+        )
         response = create_post(post, token, did)
 
         if response.status_code != 200:
@@ -127,8 +132,10 @@ def lambda_handler(event, context):
     logger.info(f"Successfully processed all {total_messages} messages")
     return {
         "statusCode": 200,
-        "body": json.dumps({
-            "message": "Successfully processed all messages",
-            "processed_count": total_messages
-        }),
+        "body": json.dumps(
+            {
+                "message": "Successfully processed all messages",
+                "processed_count": total_messages,
+            }
+        ),
     }
